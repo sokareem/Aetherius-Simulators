@@ -32,7 +32,7 @@
                 camera.position.set(3, 4, 6);
 
                 renderer = new THREE.WebGLRenderer({ antialias: true });
-                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setSize(window.innerWidth, window.innerHeight); // Corrected: Fill the window
                 renderer.setClearColor(0x05050a);
                 document.body.appendChild(renderer.domElement);
 
@@ -171,7 +171,7 @@
             function onWindowResize() {
                 camera.aspect = window.innerWidth / window.innerHeight;
                 camera.updateProjectionMatrix();
-                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setSize(window.innerWidth, window.innerHeight); // Corrected: Fill the window
             }
 
             init();
