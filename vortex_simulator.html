@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>High-Precision Vortex Dynamics Simulator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <style>
+        body { margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background-color: #000; color: #fff; font-family: 'Courier New', Courier, monospace; }
+        #canvas-container { border: 2px solid #0ff; box-shadow: 0 0 20px #0ff; }
+        h1 { color: #0ff; text-shadow: 0 0 10px #0ff; }
+        .controls { margin-top: 15px; display: grid; grid-template-columns: 1fr; gap: 15px; align-items: center; width: 80%; max-width: 600px; }
+        .control-group { display: grid; grid-template-columns: 1fr 2fr 1fr; align-items: center; gap: 10px; }
+        label { font-size: 16px; color: #0ff; text-align: right; }
+        input[type="range"] { width: 100%; margin: 0; -webkit-appearance: none; height: 5px; background: #333; outline: none; border-radius: 5px; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 15px; height: 15px; background: #0ff; cursor: pointer; border-radius: 50%; box-shadow: 0 0 10px #0ff; }
+        input[type="number"] { width: 100px; background-color: #111; color: #0ff; border: 1px solid #0ff; font-family: 'Courier New', Courier, monospace; text-align: center; }
+        #readout { margin-top: 15px; color: #0ff; font-size: 16px; text-align: center; }
+    </style>
+</head>
+<body>
+    <h1>High-Precision Vortex Dynamics Simulator</h1>
+    <div id="canvas-container"></div>
+    <div class="controls">
+        <div class="control-group">
+            <label for="strengthInput">Strength:</label>
+            <input type="range" id="strengthSlider" min="0" max="10" value="5" step="0.0001">
+            <input type="number" id="strengthInput" min="0" max="10" value="5" step="0.0001">
+        </div>
+        <div class="control-group">
+            <label for="coreInput">Core Size:</label>
+            <input type="range" id="coreSlider" min="1" max="150" value="50" step="0.0001">
+            <input type="number" id="coreInput" min="1" max="150" value="50" step="0.0001">
+        </div>
+        <div class="control-group">
+            <label for="particleInput">Particles:</label>
+            <input type="range" id="particleSlider" min="100" max="3000" value="1000" step="1">
+            <input type="number" id="particleInput" min="100" max="3000" value="1000" step="1">
+        </div>
+    </div>
+    <div id="readout">Average Kinetic Energy: 0.00</div>
+
+    <script>
+        let particles = [];
+        let center;
+        let sliders = {}, inputs = {};
+        let canvasSize;
+
+        class Particle {
+            constructor() {
+                this.pos = p5.Vector.random2D().mult(random(width / 4, width / 2)).add(center);
+                this.vel = createVector();
+                this.acc = createVector();
+                this.maxSpeed = 8;
+                this.mass = 1;
+            }
+            update() { this.vel.add(this.acc); this.vel.limit(this.maxSpeed); this.pos.add(this.vel); this.acc.mult(0); }
+            applyForce(force) { this.acc.add(force); }
+            show() { stroke(0, 255, 255, 150); strokeWeight(2); point(this.pos.x, this.pos.y); }
+            getKineticEnergy() { return 0.5 * this.mass * this.vel.magSq(); }
+            respawn() { this.pos = p5.Vector.random2D().mult(random(width / 4, width / 2)).add(center); this.vel.mult(0); }
+        }
+
+        function setup() {
+            canvasSize = min(windowWidth * 0.7, windowHeight * 0.7);
+            let canvas = createCanvas(canvasSize, canvasSize);
+            canvas.parent('canvas-container');
+            center = createVector(width / 2, height / 2);
+            
+            const controlIds = ['strength', 'core', 'particle'];
+            controlIds.forEach(id => {
+                sliders[id] = select(`#${id}Slider`);
+                inputs[id] = select(`#${id}Input`);
+                sliders[id].input(() => inputs[id].value(sliders[id].value()));
+                inputs[id].input(() => sliders[id].value(inputs[id].value()));
+            });
+
+            inputs.particle.input(resetParticles);
+            resetParticles();
+        }
+        
+        function resetParticles() {
+            particles = [];
+            let numParticles = parseInt(inputs.particle.value());
+            for (let i = 0; i < numParticles; i++) {
+                particles.push(new Particle());
+            }
+        }
+
+        function draw() {
+            background(0, 50);
+
+            let strength = float(inputs.strength.value());
+            let coreRadius = float(inputs.core.value());
+            let totalKineticEnergy = 0;
+
+            for (let p of particles) {
+                let toCenter = p5.Vector.sub(center, p.pos);
+                let dist = toCenter.mag();
+                let tangentialVel;
+
+                if (dist < coreRadius) {
+                    tangentialVel = strength * dist / coreRadius;
+                } else {
+                    tangentialVel = strength * coreRadius / dist;
+                }
+                
+                let rotationalForce = toCenter.copy().rotate(HALF_PI).setMag(tangentialVel * 0.5);
+                let inwardForce = toCenter.copy().setMag(tangentialVel * 0.05);
+
+                p.applyForce(rotationalForce);
+                p.applyForce(inwardForce);
+                p.update();
+                p.show();
+                
+                totalKineticEnergy += p.getKineticEnergy();
+                if (dist > width / 2 + 50) p.respawn();
+            }
+            
+            let avgKineticEnergy = particles.length > 0 ? totalKineticEnergy / particles.length : 0;
+            select('#readout').html(`Average Kinetic Energy: ${avgKineticEnergy.toFixed(4)}`);
+        }
+
+        function windowResized() {
+            canvasSize = min(windowWidth * 0.7, windowHeight * 0.7);
+            resizeCanvas(canvasSize, canvasSize);
+            center = createVector(width / 2, height / 2);
+            resetParticles();
+        }
+    </script>
+</body>
+</html>

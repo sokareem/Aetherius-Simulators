@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>High-Precision Cymatics Visualizer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <style>
+        body { margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background-color: #000; color: #fff; font-family: 'Courier New', Courier, monospace; }
+        #canvas-container { border: 2px solid #0f0; box-shadow: 0 0 20px #0f0; }
+        h1 { color: #0f0; text-shadow: 0 0 10px #0f0; }
+        .controls { margin-top: 15px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; align-items: center; width: 80%; max-width: 600px;}
+        .control-group { display: grid; grid-template-columns: 1fr 2fr 1fr; align-items: center; gap: 10px; }
+        label { font-size: 16px; color: #0f0; text-align: right; }
+        input[type="range"] { width: 100%; margin: 0; -webkit-appearance: none; height: 5px; background: #333; outline: none; border-radius: 5px; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 15px; height: 15px; background: #0f0; cursor: pointer; border-radius: 50%; box-shadow: 0 0 10px #0f0; }
+        input[type="number"] { width: 100px; background-color: #111; color: #0f0; border: 1px solid #0f0; font-family: 'Courier New', Courier, monospace; text-align: center; }
+        #equation { margin-top: 15px; color: #0f0; font-size: 14px; text-align: center; width: 90%; }
+    </style>
+</head>
+<body>
+    <h1>High-Precision Cymatics Visualizer</h1>
+    <div id="canvas-container"></div>
+    <div class="controls">
+        <div class="control-group">
+            <label for="fxInput">fx (Hz):</label>
+            <input type="range" id="fxSlider" min="1" max="12" value="4" step="0.0001">
+            <input type="number" id="fxInput" min="1" max="12" value="4" step="0.0001">
+        </div>
+        <div class="control-group">
+            <label for="fyInput">fy (Hz):</label>
+            <input type="range" id="fySlider" min="1" max="12" value="3" step="0.0001">
+            <input type="number" id="fyInput" min="1" max="12" value="3" step="0.0001">
+        </div>
+        <div class="control-group">
+            <label for="axInput">Amplitude X:</label>
+            <input type="range" id="axSlider" min="0" max="2" value="1" step="0.0001">
+            <input type="number" id="axInput" min="0" max="2" value="1" step="0.0001">
+        </div>
+        <div class="control-group">
+            <label for="ayInput">Amplitude Y:</label>
+            <input type="range" id="aySlider" min="0" max="2" value="1" step="0.0001">
+            <input type="number" id="ayInput" min="0" max="2" value="1" step="0.0001">
+        </div>
+    </div>
+    <div id="equation"></div>
+
+    <script>
+        let sliders = {};
+        let inputs = {};
+        let particles = [];
+        const numParticles = 5000;
+        let canvasSize;
+
+        function setup() {
+            canvasSize = min(windowWidth * 0.7, windowHeight * 0.7);
+            let canvas = createCanvas(canvasSize, canvasSize);
+            canvas.parent('canvas-container');
+            
+            const controlIds = ['fx', 'fy', 'ax', 'ay'];
+            controlIds.forEach(id => {
+                sliders[id] = select(`#${id}Slider`);
+                inputs[id] = select(`#${id}Input`);
+                
+                sliders[id].input(() => {
+                    inputs[id].value(sliders[id].value());
+                    updateEquation();
+                });
+                inputs[id].input(() => {
+                    sliders[id].value(inputs[id].value());
+                    updateEquation();
+                });
+            });
+
+            for (let i = 0; i < numParticles; i++) {
+                particles.push(createVector(random(width), random(height)));
+            }
+            
+            updateEquation();
+        }
+
+        function draw() {
+            background(0);
+            stroke(0, 255, 0, 200);
+            strokeWeight(1.5);
+
+            let m = float(inputs.fx.value());
+            let n = float(inputs.fy.value());
+            let a = float(inputs.ax.value());
+            let b = float(inputs.ay.value());
+
+            for (let p of particles) {
+                let x = map(p.x, 0, width, -PI, PI);
+                let y = map(p.y, 0, height, -PI, PI);
+
+                let val = a * sin(n * x) * sin(m * y) - b * sin(m * x) * sin(n * y);
+
+                if (abs(val) < 0.01) {
+                    point(p.x, p.y);
+                }
+            }
+        }
+        
+        function updateEquation() {
+            let m = float(inputs.fx.value()).toFixed(4);
+            let n = float(inputs.fy.value()).toFixed(4);
+            let a = float(inputs.ax.value()).toFixed(4);
+            let b = float(inputs.ay.value()).toFixed(4);
+            select('#equation').html(`Equation: ${a}*sin(${n}π*x)sin(${m}π*y) - ${b}*sin(${m}π*x)sin(${n}π*y) = 0`);
+        }
+
+        function windowResized() {
+            canvasSize = min(windowWidth * 0.7, windowHeight * 0.7);
+            resizeCanvas(canvasSize, canvasSize);
+        }
+    </script>
+</body>
+</html>

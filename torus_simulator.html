@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>High-Precision Toroidal Field Simulator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body { margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background-color: #000; color: #fff; font-family: 'Courier New', Courier, monospace; overflow: hidden; }
+        #canvas-container { border: 2px solid #f0f; box-shadow: 0 0 20px #f0f; }
+        h1 { color: #f0f; text-shadow: 0 0 10px #f0f; position: absolute; top: 10px; z-index: 10; }
+        .controls { position: absolute; bottom: 10px; width: 90%; max-width: 800px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; align-items: center; background-color: rgba(0,0,0,0.5); padding: 10px; border-radius: 10px; }
+        .control-group { display: grid; grid-template-columns: 1fr 2fr 1fr; align-items: center; gap: 10px; }
+        label { font-size: 14px; color: #f0f; text-align: right; }
+        input[type="range"] { width: 100%; margin: 0; -webkit-appearance: none; height: 5px; background: #333; outline: none; border-radius: 5px; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 15px; height: 15px; background: #f0f; cursor: pointer; border-radius: 50%; box-shadow: 0 0 10px #f0f; }
+        input[type="number"] { width: 100px; background-color: #111; color: #f0f; border: 1px solid #f0f; font-family: 'Courier New', Courier, monospace; text-align: center; }
+        #readout { position: absolute; top: 50px; color: #f0f; font-size: 16px; text-align: center; z-index: 10; }
+    </style>
+</head>
+<body>
+    <h1>High-Precision Toroidal Field Simulator</h1>
+    <div id="readout">Total Momentum: 0.00</div>
+    <div id="canvas-container"></div>
+    <div class="controls">
+        <div class="control-group">
+            <label for="torusRadiusInput">Torus Radius:</label>
+            <input type="range" id="torusRadiusSlider" min="1" max="4" value="2" step="0.0001">
+            <input type="number" id="torusRadiusInput" min="1" max="4" value="2" step="0.0001">
+        </div>
+        <div class="control-group">
+            <label for="tubeRadiusInput">Tube Radius:</label>
+            <input type="range" id="tubeRadiusSlider" min="0.2" max="2" value="0.75" step="0.0001">
+            <input type="number" id="tubeRadiusInput" min="0.2" max="2" value="0.75" step="0.0001">
+        </div>
+        <div class="control-group">
+            <label for="speedInput">Flow Speed:</label>
+            <input type="range" id="speedSlider" min="0.1" max="3" value="1" step="0.0001">
+            <input type="number" id="speedInput" min="0.1" max="3" value="1" step="0.0001">
+        </div>
+        <div class="control-group">
+            <label for="particleInput">Particles:</label>
+            <input type="range" id="particleSlider" min="1000" max="10000" value="5000" step="1">
+            <input type="number" id="particleInput" min="1000" max="10000" value="5000" step="1">
+        </div>
+    </div>
+
+    <script>
+        // This script now correctly waits for the DOM to load and uses the correct '.value' property for DOM elements.
+        document.addEventListener('DOMContentLoaded', () => {
+            let scene, camera, renderer;
+            let particleSystem, torus;
+            let sliders = {}, inputs = {};
+            let particles = [];
+
+            class Particle {
+                constructor() {
+                    this.pos = new THREE.Vector3();
+                    this.vel = new THREE.Vector3();
+                    this.mass = 1;
+                }
+                reset() {
+                    const u = Math.random() * 2 * Math.PI;
+                    const v = Math.random() * 2 * Math.PI;
+                    // This check is crucial for the first run
+                    if (inputs.torusRadius && inputs.tubeRadius) {
+                        const torusRadius = parseFloat(inputs.torusRadius.value);
+                        const tubeRadius = parseFloat(inputs.tubeRadius.value);
+                        this.pos.x = (torusRadius + tubeRadius * Math.cos(v)) * Math.cos(u);
+                        this.pos.y = (torusRadius + tubeRadius * Math.cos(v)) * Math.sin(u);
+                        this.pos.z = tubeRadius * Math.sin(v);
+                    }
+                    this.vel.set(0, 0, 0);
+                }
+                getMomentum() { return this.vel.length() * this.mass; }
+            }
+
+            function init() {
+                const container = document.getElementById('canvas-container');
+                const canvasSize = Math.min(window.innerWidth * 0.8, window.innerHeight * 0.8);
+                scene = new THREE.Scene();
+                camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
+                camera.position.z = 5;
+                renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setSize(canvasSize, canvasSize);
+                container.appendChild(renderer.domElement);
+
+                const controlIds = ['torusRadius', 'tubeRadius', 'speed', 'particle'];
+                controlIds.forEach(id => {
+                    sliders[id] = document.getElementById(`${id}Slider`);
+                    inputs[id] = document.getElementById(`${id}Input`);
+                    sliders[id].addEventListener('input', () => {
+                        inputs[id].value = sliders[id].value;
+                        handleControlChange(id);
+                    });
+                    inputs[id].addEventListener('input', () => {
+                        sliders[id].value = sliders[id].value;
+                        handleControlChange(id);
+                    });
+                });
+
+                createTorus();
+                createParticleSystem();
+                window.addEventListener('resize', onWindowResize, false);
+                animate();
+            }
+
+            function handleControlChange(id) {
+                if (id === 'torusRadius' || id === 'tubeRadius') {
+                    scene.remove(torus);
+                    createTorus();
+                }
+                if (id === 'particle') {
+                    createParticleSystem();
+                }
+            }
+
+            function createTorus() {
+                const torusRadius = parseFloat(inputs.torusRadius.value);
+                const tubeRadius = parseFloat(inputs.tubeRadius.value);
+                const geometry = new THREE.TorusGeometry(torusRadius, tubeRadius, 16, 100);
+                const material = new THREE.MeshBasicMaterial({ color: 0xff00ff, wireframe: true, transparent: true, opacity: 0.2 });
+                torus = new THREE.Mesh(geometry, material);
+                scene.add(torus);
+            }
+
+            function createParticleSystem() {
+                if (particleSystem) scene.remove(particleSystem);
+                particles = [];
+                const particleCount = parseInt(inputs.particle.value);
+                const pMaterial = new THREE.PointsMaterial({ color: 0xff00ff, size: 0.05, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.8 });
+                const bufferGeom = new THREE.BufferGeometry();
+                const particlePositions = new Float32Array(particleCount * 3);
+
+                for (let i = 0; i < particleCount; i++) {
+                    const p = new Particle();
+                    p.reset(); // Initialize position
+                    particles.push(p);
+                    particlePositions[i * 3] = p.pos.x;
+                    particlePositions[i * 3 + 1] = p.pos.y;
+                    particlePositions[i * 3 + 2] = p.pos.z;
+                }
+                bufferGeom.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+                particleSystem = new THREE.Points(bufferGeom, pMaterial);
+                scene.add(particleSystem);
+            }
+
+            function animate() {
+                requestAnimationFrame(animate);
+                if (!particleSystem) return; // Don't animate if system not ready
+
+                const positions = particleSystem.geometry.attributes.position.array;
+                let totalMomentum = 0;
+                const torusRadius = parseFloat(inputs.torusRadius.value);
+                const flowSpeed = parseFloat(inputs.speed.value);
+
+                for (let i = 0; i < particles.length; i++) {
+                    const p = particles[i];
+                    const u = Math.atan2(p.pos.y, p.pos.x);
+                    const v = Math.atan2(p.pos.z, Math.sqrt(p.pos.x * p.pos.x + p.pos.y * p.pos.y) - torusRadius);
+                    const tangentU = new THREE.Vector3(-p.pos.y, p.pos.x, 0).normalize();
+                    const tangentV = new THREE.Vector3(Math.cos(u) * -Math.sin(v), Math.sin(u) * -Math.sin(v), Math.cos(v)).normalize();
+                    const targetVel = tangentU.multiplyScalar(1).add(tangentV.multiplyScalar(2)).normalize().multiplyScalar(flowSpeed * 0.1);
+                    const force = new THREE.Vector3().subVectors(targetVel, p.vel).multiplyScalar(0.1);
+                    p.vel.add(force);
+                    p.pos.add(p.vel);
+                    positions[i * 3] = p.pos.x;
+                    positions[i * 3 + 1] = p.pos.y;
+                    positions[i * 3 + 2] = p.pos.z;
+                    totalMomentum += p.getMomentum();
+                }
+
+                particleSystem.geometry.attributes.position.needsUpdate = true;
+                particleSystem.rotation.x += 0.001;
+                particleSystem.rotation.y += 0.002;
+                document.getElementById('readout').innerText = `Total Momentum: ${(totalMomentum).toFixed(4)}`;
+                renderer.render(scene, camera);
+            }
+
+            function onWindowResize() {
+                const canvasSize = Math.min(window.innerWidth * 0.8, window.innerHeight * 0.8);
+                camera.aspect = 1;
+                camera.updateProjectionMatrix();
+                renderer.setSize(canvasSize, canvasSize);
+            }
+
+            init();
+        });
+    </script>
+</body>
+</html>
