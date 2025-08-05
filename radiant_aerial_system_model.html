@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Radiant Aerial System - Dynamic Schematic</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #111; }
+        .info-panel { position: absolute; top: 10px; width: 100%; text-align: center; color: #0ff; font-family: 'Courier New', Courier, monospace; }
+        .data-panel { position: absolute; top: 40px; left: 10px; color: #0ff; font-family: 'Courier New', Courier, monospace; background-color: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; border: 1px solid #0ff; }
+    </style>
+</head>
+<body>
+    <div class="info-panel">Radiant Aerial System<br/>Drag to rotate, scroll to zoom.</div>
+    <div id="data-overlay" class="data-panel"></div>
+    <script>
+        let scene, camera, renderer, controls;
+        let collector, capacitorPlates = [], groundRod, sparkGap, load;
+        let incomingParticles, chargeParticles, dischargeParticles;
+        let clock = new THREE.Clock();
+        let chargeLevel = 0; // 0 to 1
+        const chargeRate = 0.2; // units per second
+        const dischargeDuration = 0.1; // seconds
+        let isDischarging = false;
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(3, 4, 6);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setClearColor(0x05050a);
+            document.body.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+            // Components
+            const plateGeom = new THREE.SphereGeometry(1, 32, 16);
+            const plateMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 1, roughness: 0.2 });
+            collector = new THREE.Mesh(plateGeom, plateMat);
+            collector.position.y = 5;
+            scene.add(collector);
+
+            const groundGeom = new THREE.CylinderGeometry(0.2, 0.2, 3, 8);
+            const groundMat = new THREE.MeshStandardMaterial({ color: 0x8B4513, metalness: 0.5, roughness: 0.8 });
+            groundRod = new THREE.Mesh(groundGeom, groundMat);
+            groundRod.position.y = -1.5;
+            scene.add(groundRod);
+
+            const capGeom = new THREE.BoxGeometry(1.5, 1.5, 0.1);
+            const capMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.9, roughness: 0.1 });
+            capacitorPlates.push(new THREE.Mesh(capGeom, capMat));
+            capacitorPlates.push(new THREE.Mesh(capGeom, capMat.clone()));
+            capacitorPlates[0].position.z = -0.2;
+            capacitorPlates[1].position.z = 0.2;
+            scene.add(capacitorPlates[0], capacitorPlates[1]);
+
+            const sparkGeom = new THREE.SphereGeometry(0.1, 16, 16);
+            const sparkMat = new THREE.MeshStandardMaterial({ color: 0xffff00, emissive: 0x333300 });
+            sparkGap = new THREE.Group();
+            const spark1 = new THREE.Mesh(sparkGeom, sparkMat);
+            const spark2 = new THREE.Mesh(sparkGeom, sparkMat.clone());
+            spark1.position.x = -0.2;
+            spark2.position.x = 0.2;
+            sparkGap.add(spark1, spark2);
+            sparkGap.position.set(2, 0, 0);
+            scene.add(sparkGap);
+
+            const loadGeom = new THREE.TorusKnotGeometry(0.5, 0.15, 100, 16);
+            const loadMat = new THREE.MeshStandardMaterial({ color: 0x00ff00, emissive: 0x003300 });
+            load = new THREE.Mesh(loadGeom, loadMat);
+            load.position.set(4, 0, 0);
+            scene.add(load);
+
+            // Particle Systems
+            incomingParticles = createParticleSystem(500, 0x00aaff, 0.05);
+            chargeParticles = createParticleSystem(1000, 0xffff00, 0.03);
+            dischargeParticles = createParticleSystem(2000, 0xff0000, 0.06);
+            scene.add(incomingParticles, chargeParticles, dischargeParticles);
+
+            // Wires
+            const wireMat = new THREE.LineBasicMaterial({ color: 0xaaaaaa });
+            scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 5, 0), new THREE.Vector3(0, 0, -0.2)]), wireMat));
+            scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0.2), new THREE.Vector3(0, -1.5, 0.2)]), wireMat));
+            scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, -0.2), sparkGap.position.clone().add(new THREE.Vector3(-0.2, 0, 0))]), wireMat));
+            scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([sparkGap.position.clone().add(new THREE.Vector3(0.2, 0, 0)), load.position]), wireMat));
+            scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([load.position, new THREE.Vector3(4, -1.5, 0), new THREE.Vector3(0, -1.5, 0.2)]), wireMat));
+
+            // Lighting
+            scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+            const pointLight = new THREE.PointLight(0xffffff, 1);
+            pointLight.position.set(5, 10, 7.5);
+            scene.add(pointLight);
+
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        function createParticleSystem(count, color, size) {
+            const geom = new THREE.BufferGeometry();
+            geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
+            const mat = new THREE.PointsMaterial({ color: color, size: size, blending: THREE.AdditiveBlending, transparent: true });
+            return new THREE.Points(geom, mat);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+            const time = clock.getElapsedTime();
+
+            // Animate Incoming Radiant Energy
+            const incomingPos = incomingParticles.geometry.attributes.position;
+            for (let i = 0; i < incomingPos.count; i++) {
+                if (incomingPos.getY(i) <= 5) incomingPos.setXYZ(i, (Math.random() - 0.5) * 10, 6 + Math.random() * 4, (Math.random() - 0.5) * 10);
+                incomingPos.setY(i, incomingPos.getY(i) - 5 * delta);
+            }
+            incomingPos.needsUpdate = true;
+
+            // Charge and Discharge Logic
+            if (!isDischarging) {
+                chargeLevel += chargeRate * delta;
+                if (chargeLevel >= 1) {
+                    chargeLevel = 1;
+                    isDischarging = true;
+                    setTimeout(() => { isDischarging = false; chargeLevel = 0; }, dischargeDuration * 1000);
+                }
+            }
+
+            // Animate Capacitor Charge
+            const chargePos = chargeParticles.geometry.attributes.position;
+            for (let i = 0; i < chargePos.count; i++) {
+                if (i < chargePos.count * chargeLevel) {
+                    chargePos.setXYZ(i, (Math.random() - 0.5) * 1.4, (Math.random() - 0.5) * 1.4, (Math.random() - 0.5) * 0.3);
+                } else {
+                    chargePos.setXYZ(i, 0, 0, 1000); // Hide particles
+                }
+            }
+            chargePos.needsUpdate = true;
+
+            // Animate Discharge
+            const dischargePos = dischargeParticles.geometry.attributes.position;
+            if (isDischarging) {
+                for (let i = 0; i < dischargePos.count; i++) {
+                    const t = Math.random();
+                    const point = new THREE.Vector3().lerpVectors(sparkGap.position, load.position, t);
+                    dischargePos.setXYZ(i, point.x + (Math.random()-0.5)*0.2, point.y + (Math.random()-0.5)*0.2, point.z + (Math.random()-0.5)*0.2);
+                }
+                load.material.emissive.setHex(0x00ff00);
+            } else {
+                for (let i = 0; i < dischargePos.count; i++) dischargePos.setXYZ(i, 0, 0, 1000);
+                load.material.emissive.setHex(0x003300);
+            }
+            dischargePos.needsUpdate = true;
+
+            // Update Data
+            const energyStored = 0.5 * 1e-6 * Math.pow(chargeLevel * 10000, 2); // Joules (assuming 1uF, 10kV)
+            const outputPower = isDischarging ? (energyStored / dischargeDuration) : 0;
+            document.getElementById('data-overlay').innerHTML = `
+                <div>Capacitor Charge: ${(chargeLevel * 100).toFixed(1)}%</div>
+                <div>Energy Stored: ${energyStored.toFixed(4)} J</div>
+                <div><b>Output Power: ${outputPower.toFixed(2)} W</b></div>
+            `;
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        init();
+    </script>
+</body>
+</html>
