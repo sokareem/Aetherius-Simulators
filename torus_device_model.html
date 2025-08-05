@@ -3,19 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Golden Pi Resonator - 3D Model</title>
+    <title>Golden Pi Resonator - Animated Model</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three/examples/js/controls/OrbitControls.js"></script>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; }
         #info { position: absolute; top: 10px; width: 100%; text-align: center; color: #0f0; font-family: 'Courier New', Courier, monospace; }
+        #controls { position: absolute; bottom: 10px; left: 10px; color: #0f0; font-family: 'Courier New', Courier, monospace; background-color: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; }
     </style>
 </head>
 <body>
     <div id="info">Golden Pi Resonator<br/>Drag to rotate, scroll to zoom.</div>
+    <div id="controls">
+        <input type="checkbox" id="toggleTorus" checked> <label for="toggleTorus">Show Torus</label><br>
+        <input type="checkbox" id="toggleCoils" checked> <label for="toggleCoils">Show Coils</label><br>
+        <input type="checkbox" id="toggleFlow" checked> <label for="toggleFlow">Show Energy Flow</label><br>
+        <input type="checkbox" id="toggleField" checked> <label for="toggleField">Show Aether Field</label>
+    </div>
     <script>
         let scene, camera, renderer, controls;
-        let torus, coil1, coil2;
+        let torus, coils, energyFlow, aetherField;
+        let clock = new THREE.Clock();
 
         const PHI = 1.61803398875;
         const TORUS_RADIUS = 3;
@@ -32,49 +40,84 @@
 
             controls = new THREE.OrbitControls(camera, renderer.domElement);
 
-            // Torus
+            // Torus Structure
             const torusGeometry = new THREE.TorusGeometry(TORUS_RADIUS, TUBE_RADIUS, 32, 100);
-            const torusMaterial = new THREE.MeshStandardMaterial({ 
-                color: 0x222222, 
-                transparent: true, 
-                opacity: 0.3,
-                metalness: 0.8,
-                roughness: 0.2
-            });
+            const torusMaterial = new THREE.MeshStandardMaterial({ color: 0x222222, transparent: true, opacity: 0.1, metalness: 0.8, roughness: 0.2 });
             torus = new THREE.Mesh(torusGeometry, torusMaterial);
             scene.add(torus);
 
-            // Caduceus Coil
-            const turns = 50;
-            const coilMaterial1 = new THREE.MeshStandardMaterial({ color: 0xffaa00, emissive: 0x331100, metalness: 1, roughness: 0.3 });
-            const coilMaterial2 = new THREE.MeshStandardMaterial({ color: 0x00aaff, emissive: 0x001133, metalness: 1, roughness: 0.3 });
-            
-            const tubeGeom = new THREE.TorusGeometry(TORUS_RADIUS, 0.05, 16, 200);
+            // Caduceus Coils
+            coils = new THREE.Group();
+            const turns = 20;
+            const coilRadius = 0.05;
+            const path = new CustomSinCurve(TORUS_RADIUS, TUBE_RADIUS, turns);
+            const tubeGeometry = new THREE.TubeGeometry(path, 200, coilRadius, 8, false);
+            const coilMaterial1 = new THREE.MeshStandardMaterial({ color: 0xffaa00, metalness: 1, roughness: 0.3 });
+            const coilMaterial2 = new THREE.MeshStandardMaterial({ color: 0x00aaff, metalness: 1, roughness: 0.3 });
+            const coil1 = new THREE.Mesh(tubeGeometry, coilMaterial1);
+            const coil2 = new THREE.Mesh(tubeGeometry, coilMaterial2);
+            coil2.rotation.z = Math.PI; // Rotate 180 degrees for the second coil
+            coils.add(coil1);
+            coils.add(coil2);
+            scene.add(coils);
 
-            for (let i = 0; i < turns; i++) {
-                const angle = (i / turns) * Math.PI * 2;
-                
-                // Coil 1
-                const coil1 = new THREE.Mesh(tubeGeom, coilMaterial1);
-                coil1.rotation.y = angle;
-                coil1.scale.set(1,1,1); // Placeholder for more complex geometry
-                scene.add(coil1);
-
-                // Coil 2
-                const coil2 = new THREE.Mesh(tubeGeom, coilMaterial2);
-                coil2.rotation.y = angle + (Math.PI / turns); // Offset
-                scene.add(coil2);
+            // Energy Flow (Particle System)
+            const particleCount = 2000;
+            const particles = new THREE.BufferGeometry();
+            const pMaterial = new THREE.PointsMaterial({ color: 0x00ff00, size: 0.05, blending: THREE.AdditiveBlending, transparent: true });
+            const particlePositions = new Float32Array(particleCount * 3);
+            for (let i = 0; i < particleCount; i++) {
+                particlePositions[i * 3] = 0;
+                particlePositions[i * 3 + 1] = 0;
+                particlePositions[i * 3 + 2] = 0;
             }
+            particles.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+            energyFlow = new THREE.Points(particles, pMaterial);
+            scene.add(energyFlow);
 
+            // Aether Field
+            const fieldCount = 1000;
+            const fieldGeom = new THREE.BufferGeometry();
+            const fMaterial = new THREE.PointsMaterial({ color: 0xff00ff, size: 0.02, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.5 });
+            const fieldPositions = new Float32Array(fieldCount * 3);
+            for (let i = 0; i < fieldCount; i++) {
+                const r = 5 + Math.random() * 2;
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos(2 * Math.random() - 1);
+                fieldPositions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+                fieldPositions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+                fieldPositions[i * 3 + 2] = r * Math.cos(phi);
+            }
+            fieldGeom.setAttribute('position', new THREE.BufferAttribute(fieldPositions, 3));
+            aetherField = new THREE.Points(fieldGeom, fMaterial);
+            scene.add(aetherField);
 
             // Lighting
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
-            scene.add(ambientLight);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.2));
             const pointLight = new THREE.PointLight(0xffffff, 1);
             pointLight.position.set(5, 10, 7.5);
             scene.add(pointLight);
 
+            // UI Controls
+            document.getElementById('toggleTorus').addEventListener('change', (e) => torus.visible = e.target.checked);
+            document.getElementById('toggleCoils').addEventListener('change', (e) => coils.visible = e.target.checked);
+            document.getElementById('toggleFlow').addEventListener('change', (e) => energyFlow.visible = e.target.checked);
+            document.getElementById('toggleField').addEventListener('change', (e) => aetherField.visible = e.target.checked);
+
             window.addEventListener('resize', onWindowResize, false);
+        }
+
+        // Custom curve for the coil path
+        class CustomSinCurve extends THREE.Curve {
+            constructor(scale, tube, turns) { super(); this.scale = scale; this.tube = tube; this.turns = turns; }
+            getPoint(t) {
+                const u = t * this.turns * 2 * Math.PI;
+                const v = Math.sin(t * Math.PI * 2); // This is a simplification
+                const x = (this.scale + this.tube * Math.cos(u)) * Math.cos(v * Math.PI);
+                const y = (this.scale + this.tube * Math.cos(u)) * Math.sin(v * Math.PI);
+                const z = this.tube * Math.sin(u);
+                return new THREE.Vector3(x, y, z);
+            }
         }
 
         function onWindowResize() {
@@ -85,6 +128,25 @@
 
         function animate() {
             requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+            const time = clock.getElapsedTime();
+
+            // Animate Energy Flow
+            const positions = energyFlow.geometry.attributes.position.array;
+            const path = new CustomSinCurve(TORUS_RADIUS, TUBE_RADIUS, 20);
+            for (let i = 0; i < positions.length / 3; i++) {
+                const t = (time * 0.1 + (i / (positions.length/3))) % 1;
+                const point = path.getPoint(t);
+                positions[i * 3] = point.x;
+                positions[i * 3 + 1] = point.y;
+                positions[i * 3 + 2] = point.z;
+            }
+            energyFlow.geometry.attributes.position.needsUpdate = true;
+
+            // Animate Aether Field
+            aetherField.rotation.y += delta * 0.05;
+            aetherField.rotation.x += delta * 0.02;
+
             controls.update();
             renderer.render(scene, camera);
         }
