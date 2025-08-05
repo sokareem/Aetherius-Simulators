@@ -3,57 +3,86 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>High-Precision Cymatics Visualizer</title>
+    <title>Bio-Acoustic Cymatics Visualizer</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/addons/p5.sound.min.js"></script>
     <style>
         body { margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background-color: #000; color: #fff; font-family: 'Courier New', Courier, monospace; }
-        #canvas-container { border: 2px solid #0f0; box-shadow: 0 0 20px #0f0; }
-        h1 { color: #0f0; text-shadow: 0 0 10px #0f0; }
-        .controls { margin-top: 15px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; align-items: center; width: 80%; max-width: 600px;}
+        #canvas-container { border: 2px solid #0f0; box-shadow: 0 0 20px #0f0; position: relative; }
+        h1 { color: #0f0; text-shadow: 0 0 10px #0f0; margin-bottom: 10px; }
+        .main-container { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+        .controls { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; align-items: center; width: 100%; max-width: 700px;}
         .control-group { display: grid; grid-template-columns: 1fr 2fr 1fr; align-items: center; gap: 10px; }
-        label { font-size: 16px; color: #0f0; text-align: right; }
-        input[type="range"] { width: 100%; margin: 0; -webkit-appearance: none; height: 5px; background: #333; outline: none; border-radius: 5px; }
-        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 15px; height: 15px; background: #0f0; cursor: pointer; border-radius: 50%; box-shadow: 0 0 10px #0f0; }
-        input[type="number"] { width: 100px; background-color: #111; color: #0f0; border: 1px solid #0f0; font-family: 'Courier New', Courier, monospace; text-align: center; }
-        #equation { margin-top: 15px; color: #0f0; font-size: 14px; text-align: center; width: 90%; }
+        label { font-size: 14px; color: #0f0; text-align: right; }
+        input[type="range"], input[type="number"] { width: 100%; }
+        #equation { color: #0f0; font-size: 12px; text-align: center; width: 100%; height: 1.5em;}
+        .mode-controls { grid-column: 1 / -1; border: 1px solid #0f0; padding: 10px; border-radius: 5px; }
+        .mode-toggle, .playback-controls, .mic-controls { display: flex; justify-content: center; align-items: center; gap: 10px; margin-top: 5px; }
+        #start-prompt, #server-warning { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.8); display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; font-size: 24px; color: #0f0; cursor: pointer; z-index: 100; }
+        #server-warning { color: #f00; border: 2px solid #f00; }
+        button, select { background-color: #111; color: #0f0; border: 1px solid #0f0; font-family: 'Courier New', Courier, monospace; }
+        #progressBar { width: 100%; }
     </style>
 </head>
 <body>
-    <h1>High-Precision Cymatics Visualizer</h1>
-    <div id="canvas-container"></div>
-    <div class="controls">
-        <div class="control-group">
-            <label for="fxInput">fx (Hz):</label>
-            <input type="range" id="fxSlider" min="1" max="12" value="4" step="0.0001">
-            <input type="number" id="fxInput" min="1" max="12" value="4" step="0.0001">
+    <div class="main-container">
+        <h1>Bio-Acoustic Cymatics Visualizer</h1>
+        <div id="canvas-container">
+            <div id="start-prompt"><p>Click to Activate Audio</p></div>
+            <div id="server-warning" style="display: none;"><p><strong>ERROR:</strong> Audio features disabled.</p><p style="font-size: 16px;">This file must be run from a web server.</p></div>
         </div>
-        <div class="control-group">
-            <label for="fyInput">fy (Hz):</label>
-            <input type="range" id="fySlider" min="1" max="12" value="3" step="0.0001">
-            <input type="number" id="fyInput" min="1" max="12" value="3" step="0.0001">
-        </div>
-        <div class="control-group">
-            <label for="axInput">Amplitude X:</label>
-            <input type="range" id="axSlider" min="0" max="2" value="1" step="0.0001">
-            <input type="number" id="axInput" min="0" max="2" value="1" step="0.0001">
-        </div>
-        <div class="control-group">
-            <label for="ayInput">Amplitude Y:</label>
-            <input type="range" id="aySlider" min="0" max="2" value="1" step="0.0001">
-            <input type="number" id="ayInput" min="0" max="2" value="1" step="0.0001">
+        <div id="equation"></div>
+        <div class="controls">
+            <div class="control-group">
+                <label for="fxInput">fx (Bass):</label>
+                <input type="range" id="fxSlider" min="1" max="12" value="4" step="0.0001"><input type="number" id="fxInput" min="1" max="12" value="4" step="0.0001">
+            </div>
+            <div class="control-group">
+                <label for="fyInput">fy (Treble):</label>
+                <input type="range" id="fySlider" min="1" max="12" value="3" step="0.0001"><input type="number" id="fyInput" min="1" max="12" value="3" step="0.0001">
+            </div>
+            <div class="control-group">
+                <label for="axInput">Intensity (Ax):</label>
+                <input type="range" id="axSlider" min="0" max="200" value="100" step="0.01"><input type="number" id="axInput" min="0" max="200" value="100" step="0.01">
+            </div>
+            <div class="control-group">
+                <label for="ayInput">Intensity (Ay):</label>
+                <input type="range" id="aySlider" min="0" max="200" value="100" step="0.01"><input type="number" id="ayInput" min="0" max="200" value="100" step="0.01">
+            </div>
+            <div class="mode-controls">
+                <div class="mode-toggle">
+                    <label for="sourceSelect">Audio Source:</label>
+                    <select id="sourceSelect"><option value="manual">Manual</option><option value="mic">Microphone</option></select>
+                    <input type="file" id="fileInput" accept="audio/mp3,audio/wav" style="display: none;"><button id="uploadButton">Upload</button>
+                </div>
+                <div id="micControls" class="mic-controls" style="display: none;">
+                    <label for="gateSlider">Noise Gate:</label><input type="range" id="gateSlider" min="0" max="1" value="0.05" step="0.01">
+                </div>
+                <div id="playbackControls" class="playback-controls" style="display: none;">
+                    <button id="playPauseButton">Play</button><button id="stopButton">Stop</button>
+                    <input type="range" id="volumeSlider" min="0" max="1" value="0.8" step="0.01"><label for="loopCheckbox">Loop:</label><input type="checkbox" id="loopCheckbox" checked>
+                    <input type="range" id="progressBar" min="0" max="1" value="0" step="0.001">
+                </div>
+            </div>
         </div>
     </div>
-    <div id="equation"></div>
 
     <script>
-        let sliders = {};
-        let inputs = {};
+        if (window.location.protocol === 'file:') {
+            document.getElementById('start-prompt').style.display = 'none';
+            document.getElementById('server-warning').style.display = 'flex';
+        }
+
+        let sliders = {}, inputs = {};
         let particles = [];
-        const numParticles = 5000;
+        const numParticles = 3000;
         let canvasSize;
+        let mic, fft, soundFile, amplitude;
+        let audioStarted = false;
+        let currentSource = 'manual';
 
         function setup() {
-            canvasSize = min(windowWidth * 0.7, windowHeight * 0.7);
+            canvasSize = min(windowWidth * 0.7, windowHeight * 0.5);
             let canvas = createCanvas(canvasSize, canvasSize);
             canvas.parent('canvas-container');
             
@@ -61,21 +90,20 @@
             controlIds.forEach(id => {
                 sliders[id] = select(`#${id}Slider`);
                 inputs[id] = select(`#${id}Input`);
-                
-                sliders[id].input(() => {
-                    inputs[id].value(sliders[id].value());
-                    updateEquation();
-                });
-                inputs[id].input(() => {
-                    sliders[id].value(inputs[id].value());
-                    updateEquation();
-                });
+                sliders[id].input(() => { inputs[id].value(sliders[id].value()); updateEquation(); });
+                inputs[id].input(() => { sliders[id].value(inputs[id].value()); updateEquation(); });
             });
 
-            for (let i = 0; i < numParticles; i++) {
-                particles.push(createVector(random(width), random(height)));
-            }
-            
+            select('#sourceSelect').changed(changeSource);
+            select('#uploadButton').mousePressed(() => select('#fileInput').elt.click());
+            select('#fileInput').changed(handleFile);
+            select('#playPauseButton').mousePressed(togglePlay);
+            select('#stopButton').mousePressed(stopSound);
+            select('#loopCheckbox').changed(() => soundFile?.setLoop(select('#loopCheckbox').checked()));
+            select('#volumeSlider').input(() => soundFile?.setVolume(float(select('#volumeSlider').value())));
+            select('#progressBar').input(() => { const dur = soundFile?.duration(); if (dur) soundFile.jump(dur * float(select('#progressBar').value())); });
+
+            for (let i = 0; i < numParticles; i++) particles.push(createVector(random(width), random(height)));
             updateEquation();
         }
 
@@ -84,33 +112,122 @@
             stroke(0, 255, 0, 200);
             strokeWeight(1.5);
 
+            if (audioStarted && currentSource !== 'manual') {
+                fft.analyze();
+                let bass = fft.getEnergy("bass");
+                let treble = fft.getEnergy("treble");
+                let mid = fft.getEnergy("mid");
+                let ampValue = 0;
+
+                if (currentSource === 'mic') {
+                    let micLevel = mic.getLevel();
+                    let gateThreshold = select('#gateSlider').value();
+                    ampValue = micLevel > gateThreshold ? micLevel : 0;
+                } else if (soundFile?.isPlaying()) {
+                    ampValue = amplitude.getLevel();
+                    select('#progressBar').value(soundFile.currentTime() / soundFile.duration());
+                }
+
+                let fx = map(bass, 0, 255, 1, 12);
+                let fy = map(treble, 0, 255, 1, 12);
+                let ax = map(ampValue, 0, 0.5, 0, 200);
+                let ay = map(mid, 0, 255, 200, 0);
+
+                ['fx', 'fy', 'ax', 'ay'].forEach(id => {
+                    const val = eval(id);
+                    inputs[id].value(val.toFixed(4)); sliders[id].value(val);
+                });
+                updateEquation();
+            }
+
             let m = float(inputs.fx.value());
             let n = float(inputs.fy.value());
-            let a = float(inputs.ax.value());
-            let b = float(inputs.ay.value());
+            let a_mult = float(inputs.ax.value()) / 100.0;
+            let b_mult = float(inputs.ay.value()) / 100.0;
 
             for (let p of particles) {
                 let x = map(p.x, 0, width, -PI, PI);
                 let y = map(p.y, 0, height, -PI, PI);
-
-                let val = a * sin(n * x) * sin(m * y) - b * sin(m * x) * sin(n * y);
-
-                if (abs(val) < 0.01) {
-                    point(p.x, p.y);
-                }
+                let val = a_mult * sin(n * x) * sin(m * y) - b_mult * sin(m * x) * sin(n * y);
+                if (abs(val) < 0.01) point(p.x, p.y);
             }
         }
         
+        function touchStarted() {
+            if (window.location.protocol === 'file:' || audioStarted) return;
+            select('#start-prompt')?.remove();
+            userStartAudio().then(() => {
+                mic = new p5.AudioIn();
+                mic.start(() => {
+                    fft = new p5.FFT();
+                    fft.setInput(mic);
+                    amplitude = new p5.Amplitude();
+                    amplitude.setInput(mic);
+                    audioStarted = true;
+                }, (err) => console.error("Mic start err:", err));
+            });
+        }
+
+        function changeSource() {
+            currentSource = select('#sourceSelect').value();
+            toggleControls(currentSource !== 'manual');
+            select('#micControls').style('display', currentSource === 'mic' ? 'flex' : 'none');
+            select('#playbackControls').style('display', currentSource === 'file' ? 'flex' : 'none');
+            
+            soundFile?.stop();
+            if (currentSource === 'mic') mic?.start(); else mic?.stop();
+        }
+
+        function handleFile(file) {
+            if (file.type === 'audio') {
+                soundFile?.stop();
+                soundFile = loadSound(file.data, () => {
+                    select('#sourceSelect').value('file');
+                    currentSource = 'file';
+                    toggleControls(true);
+                    mic?.stop();
+                    fft.setInput(soundFile);
+                    amplitude.setInput(soundFile);
+                    soundFile.setLoop(select('#loopCheckbox').checked());
+                    soundFile.setVolume(float(select('#volumeSlider').value()));
+                    soundFile.play();
+                    select('#playPauseButton').html('Pause');
+                });
+            }
+        }
+
+        function togglePlay() {
+            if (soundFile?.isPlaying()) {
+                soundFile.pause();
+                select('#playPauseButton').html('Play');
+            } else {
+                soundFile?.play();
+                select('#playPauseButton').html('Pause');
+            }
+        }
+
+        function stopSound() {
+            soundFile?.stop();
+            select('#playPauseButton').html('Play');
+        }
+
+        function toggleControls(isDisabled) {
+            ['fx', 'fy', 'ax', 'ay'].forEach(id => {
+                inputs[id].elt.disabled = isDisabled;
+                sliders[id].elt.disabled = isDisabled;
+            });
+        }
+
         function updateEquation() {
-            let m = float(inputs.fx.value()).toFixed(4);
-            let n = float(inputs.fy.value()).toFixed(4);
-            let a = float(inputs.ax.value()).toFixed(4);
-            let b = float(inputs.ay.value()).toFixed(4);
-            select('#equation').html(`Equation: ${a}*sin(${n}π*x)sin(${m}π*y) - ${b}*sin(${m}π*x)sin(${n}π*y) = 0`);
+            let m = float(inputs.fx.value()).toFixed(2);
+            let n = float(inputs.fy.value()).toFixed(2);
+            let a = (float(inputs.ax.value())/100.0).toFixed(2);
+            let b = (float(inputs.ay.value())/100.0).toFixed(2);
+            select('#equation').html(`Eq: ${a}*sin(${n}πx)sin(${m}πy) - ${b}*sin(${m}πx)sin(${n}πy) = 0`);
         }
 
         function windowResized() {
-            canvasSize = min(windowWidth * 0.7, windowHeight * 0.7);
+            canvasSize = min(windowWidth * 0.7, windowHeight * 0.5);
             resizeCanvas(canvasSize, canvasSize);
         }
     </script>
