@@ -10,40 +10,38 @@
     <script src="https://cdn.jsdelivr.net/npm/three/examples/js/geometries/TextGeometry.js"></script>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; }
-        #info { position: absolute; top: 10px; width: 100%; text-align: center; color: #0f0; font-family: 'Courier New', Courier, monospace; }
-        #controls { position: absolute; bottom: 10px; left: 10px; color: #0f0; font-family: 'Courier New', Courier, monospace; background-color: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; }
-        #data-overlay { position: absolute; top: 40px; left: 10px; color: #0f0; font-family: 'Courier New', Courier, monospace; background-color: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; }
+        .info-panel { position: absolute; top: 10px; width: 100%; text-align: center; color: #0f0; font-family: 'Courier New', Courier, monospace; }
+        .data-panel { position: absolute; top: 40px; left: 10px; color: #0f0; font-family: 'Courier New', Courier, monospace; background-color: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; border: 1px solid #0f0; }
+        .controls-panel { position: absolute; bottom: 10px; left: 10px; color: #0f0; font-family: 'Courier New', Courier, monospace; background-color: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; }
     </style>
 </head>
 <body>
-    <div id="info">Golden Pi Resonator<br/>Drag to rotate, scroll to zoom.</div>
-    <div id="data-overlay">
-        <div>Core Geometry: R/r = 1.618 (φ)</div>
-        <div>Flow Velocity: 3.142 (π) m/s</div>
-        <div id="momentum-readout">Aether Momentum: 0</div>
-    </div>
-    <div id="controls">
+    <div class="info-panel">Golden Pi Resonator<br/>Drag to rotate, scroll to zoom.</div>
+    <div id="data-overlay" class="data-panel"></div>
+    <div id="controls" class="controls-panel">
         <input type="checkbox" id="toggleCore" checked> <label for="toggleCore">Show Core</label><br>
         <input type="checkbox" id="toggleCoils" checked> <label for="toggleCoils">Show Coils</label><br>
         <input type="checkbox" id="toggleFlow" checked> <label for="toggleFlow">Show Energy Flow</label><br>
-        <input type="checkbox" id="toggleField" checked> <label for="toggleField">Show Aether Field</label><br>
+        <input type="checkbox" id="toggleField" checked> <label for="toggleField">Show Aether Vortex</label><br>
         <input type="checkbox" id="toggleLabels" checked> <label for="toggleLabels">Show Labels</label>
     </div>
     <script>
         let scene, camera, renderer, controls;
-        let core, coils, energyFlow, aetherField, labelsGroup;
+        let core, coils, energyFlow, aetherVortex, labelsGroup;
         let clock = new THREE.Clock();
         let font;
 
         const PHI = 1.61803398875;
-        const TORUS_RADIUS = 3;
-        const TUBE_RADIUS = TORUS_RADIUS / PHI;
-        const FLOW_SPEED = Math.PI;
+        const TORUS_RADIUS = 1.5; // m
+        const TUBE_RADIUS = TORUS_RADIUS / PHI; // m
+        const FLOW_SPEED = Math.PI; // m/s
+        const P_IN = 100; // Watts
+        const ETA = 0.1; // Aetheric Transduction Coefficient
 
         function init() {
             scene = new THREE.Scene();
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 2, 7);
+            camera.position.set(0, 1.5, 5);
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
@@ -51,17 +49,13 @@
 
             controls = new THREE.OrbitControls(camera, renderer.domElement);
 
-            // Load font then create labels
             const loader = new THREE.FontLoader();
-            loader.load('https://cdn.jsdelivr.net/npm/three/examples/fonts/helvetiker_regular.typeface.json', function (loadedFont) {
-                font = loadedFont;
-                createLabels();
-            });
+            loader.load('https://cdn.jsdelivr.net/npm/three/examples/fonts/helvetiker_regular.typeface.json', f => { font = f; createLabels(); });
 
             createCore();
             createCoils();
             createEnergyFlow();
-            createAetherField();
+            createAetherVortex();
             createLighting();
             setupUI();
 
@@ -78,61 +72,56 @@
         function createCoils() {
             coils = new THREE.Group();
             const turns = 20;
-            const coilRadius = 0.05;
-            const path = new THREE.CatmullRomCurve3(getCoilPathPoints(turns, 0));
+            const coilRadius = 0.03;
+            const path = new THREE.CatmullRomCurve3(getCoilPathPoints(turns));
             const tubeGeometry = new THREE.TubeGeometry(path, 200, coilRadius, 8, true);
-            const coilMaterial1 = new THREE.MeshStandardMaterial({ color: 0xffaa00, metalness: 1, roughness: 0.3 });
-            const coilMaterial2 = new THREE.MeshStandardMaterial({ color: 0x00aaff, metalness: 1, roughness: 0.3 });
-            const coil1 = new THREE.Mesh(tubeGeometry, coilMaterial1);
-            const coil2 = new THREE.Mesh(tubeGeometry, coilMaterial2);
-            coil2.rotation.z = Math.PI / turns; // Offset second coil
-            coils.add(coil1);
-            coils.add(coil2);
+            const coilMat1 = new THREE.MeshStandardMaterial({ color: 0xffaa00, metalness: 1, roughness: 0.3 });
+            const coilMat2 = new THREE.MeshStandardMaterial({ color: 0x00aaff, metalness: 1, roughness: 0.3 });
+            const coil1 = new THREE.Mesh(tubeGeometry, coilMat1);
+            const coil2 = new THREE.Mesh(tubeGeometry, coilMat2);
+            coil2.rotation.z = Math.PI / turns;
+            coils.add(coil1, coil2);
             scene.add(coils);
         }
 
         function createEnergyFlow() {
             energyFlow = new THREE.Group();
             const particleCount = 2000;
-            const pMaterial = new THREE.PointsMaterial({ color: 0x00ff00, size: 0.05, blending: THREE.AdditiveBlending, transparent: true });
             const particles = new THREE.BufferGeometry();
-            const positions = new Float32Array(particleCount * 3);
-            particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-            const particleSystem = new THREE.Points(particles, pMaterial);
-            energyFlow.add(particleSystem);
+            const pMaterial = new THREE.PointsMaterial({ color: 0x00ff00, size: 0.04, blending: THREE.AdditiveBlending, transparent: true });
+            particles.setAttribute('position', new THREE.BufferAttribute(new Float32Array(particleCount * 3), 3));
+            energyFlow.add(new THREE.Points(particles, pMaterial));
 
-            // Arrows
-            const arrowGeom = new THREE.ConeGeometry(0.1, 0.3, 8);
+            const arrowGeom = new THREE.ConeGeometry(0.05, 0.15, 8);
             const arrowMat1 = new THREE.MeshBasicMaterial({ color: 0xffff00 });
             const arrowMat2 = new THREE.MeshBasicMaterial({ color: 0x00ffff });
-            for (let i = 0; i < 10; i++) {
+            for (let i = 0; i < 12; i++) {
                 energyFlow.add(new THREE.Mesh(arrowGeom, arrowMat1));
                 energyFlow.add(new THREE.Mesh(arrowGeom, arrowMat2));
             }
             scene.add(energyFlow);
         }
 
-        function createAetherField() {
-            const fieldCount = 1000;
+        function createAetherVortex() {
+            const fieldCount = 1500;
             const fieldGeom = new THREE.BufferGeometry();
-            const fMaterial = new THREE.PointsMaterial({ color: 0xff00ff, size: 0.02, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.5 });
-            const fieldPositions = new Float32Array(fieldCount * 3);
+            const fMaterial = new THREE.PointsMaterial({ color: 0xffaaff, size: 0.03, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.6 });
+            const positions = new Float32Array(fieldCount * 3);
+            const data = new Float32Array(fieldCount * 3); // u, v, offset
             for (let i = 0; i < fieldCount; i++) {
-                const r = 5 + Math.random() * 2;
-                const theta = Math.random() * Math.PI * 2;
-                const phi = Math.acos(2 * Math.random() - 1);
-                fieldPositions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-                fieldPositions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
-                fieldPositions[i * 3 + 2] = r * Math.cos(phi);
+                data[i * 3] = Math.random() * 2 * Math.PI;
+                data[i * 3 + 1] = Math.random() * 2 * Math.PI;
+                data[i * 3 + 2] = Math.random() * 0.1;
             }
-            fieldGeom.setAttribute('position', new THREE.BufferAttribute(fieldPositions, 3));
-            aetherField = new THREE.Points(fieldGeom, fMaterial);
-            scene.add(aetherField);
+            fieldGeom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            fieldGeom.userData.data = data;
+            aetherVortex = new THREE.Points(fieldGeom, fMaterial);
+            scene.add(aetherVortex);
         }
 
         function createLighting() {
-            scene.add(new THREE.AmbientLight(0xffffff, 0.2));
-            const pointLight = new THREE.PointLight(0xffffff, 1);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+            const pointLight = new THREE.PointLight(0xffffff, 0.8);
             pointLight.position.set(5, 10, 7.5);
             scene.add(pointLight);
         }
@@ -140,25 +129,19 @@
         function createLabels() {
             labelsGroup = new THREE.Group();
             const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+            const textParams = { font: font, size: 0.15, height: 0.01 };
             
-            // Core Label
-            const coreLabelGeom = new THREE.TextGeometry('Golden Ratio Core', { font: font, size: 0.2, height: 0.02 });
-            const coreLabel = new THREE.Mesh(coreLabelGeom, material);
+            const coreLabel = new THREE.Mesh(new THREE.TextGeometry('Golden Ratio Core', textParams), material);
             coreLabel.position.set(TORUS_RADIUS, TUBE_RADIUS + 0.2, 0);
             labelsGroup.add(coreLabel);
 
-            // Coil Label
-            const coilLabelGeom = new THREE.TextGeometry('Caduceus Coil', { font: font, size: 0.2, height: 0.02 });
-            const coilLabel = new THREE.Mesh(coilLabelGeom, material);
-            coilLabel.position.set(-TORUS_RADIUS, -TUBE_RADIUS - 0.4, 0);
+            const coilLabel = new THREE.Mesh(new THREE.TextGeometry('Caduceus Coil', textParams), material);
+            coilLabel.position.set(-TORUS_RADIUS, -TUBE_RADIUS - 0.3, 0);
             labelsGroup.add(coilLabel);
 
-            // Aether Label
-            const aetherLabelGeom = new THREE.TextGeometry('Aetheric Vortex', { font: font, size: 0.2, height: 0.02 });
-            const aetherLabel = new THREE.Mesh(aetherLabelGeom, material);
-            aetherLabel.position.set(0, 5.5, 0);
+            const aetherLabel = new THREE.Mesh(new THREE.TextGeometry('Aetheric Vortex', textParams), material);
+            aetherLabel.position.set(0, TORUS_RADIUS + TUBE_RADIUS + 1, 0);
             labelsGroup.add(aetherLabel);
-
             scene.add(labelsGroup);
         }
 
@@ -166,15 +149,15 @@
             document.getElementById('toggleCore').addEventListener('change', (e) => core.visible = e.target.checked);
             document.getElementById('toggleCoils').addEventListener('change', (e) => coils.visible = e.target.checked);
             document.getElementById('toggleFlow').addEventListener('change', (e) => energyFlow.visible = e.target.checked);
-            document.getElementById('toggleField').addEventListener('change', (e) => aetherField.visible = e.target.checked);
+            document.getElementById('toggleField').addEventListener('change', (e) => aetherVortex.visible = e.target.checked);
             document.getElementById('toggleLabels').addEventListener('change', (e) => labelsGroup.visible = e.target.checked);
         }
 
-        function getCoilPathPoints(turns, offset) {
+        function getCoilPathPoints(turns) {
             const points = [];
             for (let i = 0; i <= 200; i++) {
                 const t = i / 200;
-                const u = t * turns * 2 * Math.PI + offset;
+                const u = t * turns * 2 * Math.PI;
                 const v = t * 2 * Math.PI;
                 const x = (TORUS_RADIUS + TUBE_RADIUS * Math.cos(u)) * Math.cos(v);
                 const y = (TORUS_RADIUS + TUBE_RADIUS * Math.cos(u)) * Math.sin(v);
@@ -187,39 +170,59 @@
         function animate() {
             requestAnimationFrame(animate);
             const time = clock.getElapsedTime();
-            const delta = clock.getDelta();
+            let totalMomentum = 0;
 
-            // Animate Energy Flow
-            const positions = energyFlow.children[0].geometry.attributes.position.array;
-            const path = new THREE.CatmullRomCurve3(getCoilPathPoints(20, 0));
-            for (let i = 0; i < positions.length / 3; i++) {
-                const t = (time * 0.1 * FLOW_SPEED + (i / (positions.length/3))) % 1;
+            // Animate Inner Energy Flow
+            const path = new THREE.CatmullRomCurve3(getCoilPathPoints(20));
+            const flowPositions = energyFlow.children[0].geometry.attributes.position;
+            for (let i = 0; i < flowPositions.count; i++) {
+                const t = (time * 0.2 * FLOW_SPEED + (i / flowPositions.count)) % 1;
                 const point = path.getPointAt(t);
-                positions[i * 3] = point.x;
-                positions[i * 3 + 1] = point.y;
-                positions[i * 3 + 2] = point.z;
+                flowPositions.setXYZ(i, point.x, point.y, point.z);
+                totalMomentum += FLOW_SPEED * (1 + 0.1 * Math.sin(time * 2 + i * 0.1)); // Add fluctuation
             }
-            energyFlow.children[0].geometry.attributes.position.needsUpdate = true;
+            flowPositions.needsUpdate = true;
 
             // Animate Arrows
-            for (let i = 0; i < 10; i++) {
-                const t1 = (time * 0.1 * FLOW_SPEED + (i / 10)) % 1;
-                const p1 = path.getPointAt(t1);
-                const p2 = path.getPointAt((t1 + 0.01) % 1);
-                energyFlow.children[i*2+1].position.copy(p1);
-                energyFlow.children[i*2+1].lookAt(p2);
-
-                const t2 = 1 - ((time * 0.1 * FLOW_SPEED + (i / 10)) % 1);
-                const p3 = path.getPointAt(t2);
-                const p4 = path.getPointAt((t2 - 0.01 + 1) % 1);
-                energyFlow.children[i*2+2].position.copy(p3);
-                energyFlow.children[i*2+2].lookAt(p4);
+            for (let i = 0; i < 12; i++) {
+                const arrow = energyFlow.children[i + 1];
+                const t = (time * 0.2 * FLOW_SPEED + (i / 12)) % 1;
+                const p1 = path.getPointAt(t);
+                const p2 = path.getPointAt((t + 0.01) % 1);
+                arrow.position.copy(p1);
+                arrow.lookAt(p2);
             }
 
-            // Animate Aether Field
-            aetherField.rotation.y += delta * 0.05;
-            aetherField.rotation.x += delta * 0.02;
-            document.getElementById('momentum-readout').innerText = `Aether Momentum: ${(Math.sin(time * 0.5) * 500 + 500).toFixed(2)}`;
+            // Animate Aether Vortex
+            const vortexPositions = aetherVortex.geometry.attributes.position;
+            const vortexData = aetherVortex.geometry.userData.data;
+            const R_outer = TORUS_RADIUS + TUBE_RADIUS + 1;
+            const r_outer = 1.0;
+            for (let i = 0; i < vortexPositions.count; i++) {
+                const u = vortexData[i * 3] + time * 0.1 + vortexData[i*3+2];
+                const v = vortexData[i * 3 + 1] + time * 0.2 + vortexData[i*3+2];
+                const x = (R_outer + r_outer * Math.cos(v)) * Math.cos(u);
+                const y = (R_outer + r_outer * Math.cos(v)) * Math.sin(u);
+                const z = r_outer * Math.sin(v);
+                vortexPositions.setXYZ(i, x, y, z);
+            }
+            vortexPositions.needsUpdate = true;
+            
+            // Update Data Overlay
+            const p_out = totalMomentum * ETA;
+            const cop = p_out / P_IN;
+            const volume = (Math.PI * Math.pow(TUBE_RADIUS, 2)) * (2 * Math.PI * TORUS_RADIUS);
+            const power_density = p_out / volume;
+            document.getElementById('data-overlay').innerHTML = `
+                <div>Core Geometry: R/r = ${TORUS_RADIUS.toFixed(2)}/${TUBE_RADIUS.toFixed(2)} = ${PHI.toFixed(3)} (φ)</div>
+                <div>Flow Velocity: ${FLOW_SPEED.toFixed(3)} (π) m/s</div>
+                <div>Input Power (P_in): ${P_IN.toFixed(2)} W</div>
+                <div id="momentum-readout">Aether Momentum: ${totalMomentum.toFixed(2)}</div>
+                <div>Output Power (P_out): ${p_out.toFixed(2)} W</div>
+                <div><b>COP (P_out/P_in): ${cop.toFixed(2)}</b></div>
+                <div>Volume: ${volume.toFixed(4)} m³</div>
+                <div><b>Power Density: ${power_density.toFixed(2)} W/m³</b></div>
+            `;
 
             if (labelsGroup) labelsGroup.quaternion.copy(camera.quaternion);
             controls.update();
